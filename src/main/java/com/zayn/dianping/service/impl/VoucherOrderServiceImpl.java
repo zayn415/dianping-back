@@ -8,9 +8,11 @@ import com.zayn.dianping.mapper.VoucherOrderMapper;
 import com.zayn.dianping.service.ISeckillVoucherService;
 import com.zayn.dianping.service.IVoucherOrderService;
 import com.zayn.dianping.utils.RedisIDGenerator;
+import com.zayn.dianping.utils.SimpleRedisLock;
 import com.zayn.dianping.utils.UserHolder;
 import lombok.RequiredArgsConstructor;
 import org.springframework.aop.framework.AopContext;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,6 +28,7 @@ import java.time.LocalDateTime;
 public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, VoucherOrder> implements IVoucherOrderService {
     private final ISeckillVoucherService seckillVoucherService;
     private final RedisIDGenerator redisIDGenerator;
+    private final StringRedisTemplate stringRedisTemplate;
     
     /**
      * 抢购秒杀优惠券
@@ -55,11 +58,19 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         
         // aop代理对象
         // spring事务失效
-        // synchronized锁
+        // synchronized锁，只能保证单进程下的线程安全
+        // todo 集群下不安全
         Long userId = UserHolder.getUser().getId();
-        synchronized (userId.toString().intern()) {
+        SimpleRedisLock lock = new SimpleRedisLock(stringRedisTemplate, "order:" + userId);
+        boolean locked = lock.lock(100);
+        if (!locked) {
+            return Result.fail("请勿重复抢购");
+        }
+        try {
             IVoucherOrderService proxy = (IVoucherOrderService) AopContext.currentProxy();
             return proxy.createVoucherOrder(voucherId);
+        } finally {
+            lock.unlock();
         }
         // 事务提交后才释放锁
     }
