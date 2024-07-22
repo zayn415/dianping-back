@@ -8,10 +8,13 @@ import com.zayn.dianping.mapper.VoucherMapper;
 import com.zayn.dianping.service.ISeckillVoucherService;
 import com.zayn.dianping.service.IVoucherService;
 import jakarta.annotation.Resource;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+
+import static com.zayn.dianping.utils.RedisConstants.SECKILL_STOCK_KEY;
 
 /**
  * <p>
@@ -21,6 +24,8 @@ import java.util.List;
 @Service
 public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, Voucher> implements IVoucherService {
     
+    @Resource
+    private StringRedisTemplate stringRedisTemplate;
     @Resource
     private ISeckillVoucherService seckillVoucherService;
     
@@ -32,6 +37,12 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, Voucher> impl
         return Result.ok(vouchers);
     }
     
+    /**
+     * 新增秒杀券
+     * todo 保存到redis中
+     *
+     * @param voucher 优惠券信息，包含秒杀信息
+     */
     @Override
     @Transactional
     public void addSeckillVoucher(Voucher voucher) {
@@ -44,5 +55,8 @@ public class VoucherServiceImpl extends ServiceImpl<VoucherMapper, Voucher> impl
         seckillVoucher.setBeginTime(voucher.getBeginTime());
         seckillVoucher.setEndTime(voucher.getEndTime());
         seckillVoucherService.save(seckillVoucher);
+        
+        // 保存到redis中
+        stringRedisTemplate.opsForValue().set(SECKILL_STOCK_KEY + voucher.getId(), String.valueOf(voucher.getStock()));
     }
 }

@@ -8,9 +8,10 @@ import com.zayn.dianping.mapper.VoucherOrderMapper;
 import com.zayn.dianping.service.ISeckillVoucherService;
 import com.zayn.dianping.service.IVoucherOrderService;
 import com.zayn.dianping.utils.RedisIDGenerator;
-import com.zayn.dianping.utils.SimpleRedisLock;
 import com.zayn.dianping.utils.UserHolder;
 import lombok.RequiredArgsConstructor;
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
 import org.springframework.aop.framework.AopContext;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
@@ -29,6 +30,7 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
     private final ISeckillVoucherService seckillVoucherService;
     private final RedisIDGenerator redisIDGenerator;
     private final StringRedisTemplate stringRedisTemplate;
+    private final RedissonClient redissonClient;
     
     /**
      * 抢购秒杀优惠券
@@ -59,10 +61,12 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         // aop代理对象
         // spring事务失效
         // synchronized锁，只能保证单进程下的线程安全
+        // 事务提交后才释放锁
         // todo 集群下不安全
         Long userId = UserHolder.getUser().getId();
-        SimpleRedisLock lock = new SimpleRedisLock(stringRedisTemplate, "order:" + userId);
-        boolean locked = lock.lock(100);
+        // 分布式锁
+        RLock lock = redissonClient.getLock("lock:order:" + userId);
+        boolean locked = lock.tryLock();
         if (!locked) {
             return Result.fail("请勿重复抢购");
         }
@@ -72,14 +76,13 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         } finally {
             lock.unlock();
         }
-        // 事务提交后才释放锁
     }
     
     /**
      * 创建优惠券订单
      *
      * @param voucherId 优惠券id
-     * @return
+     * @return 订单id
      */
     @Transactional
     public Result createVoucherOrder(Long voucherId) {
