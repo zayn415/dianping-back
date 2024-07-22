@@ -48,7 +48,7 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
     private final RedisIDGenerator redisIDGenerator;
     private final StringRedisTemplate stringRedisTemplate;
     private final RedissonClient redissonClient;
-    private BlockingQueue<VoucherOrder> orderTaskQueue = new ArrayBlockingQueue<>(1024 * 1024);
+    private final BlockingQueue<VoucherOrder> orderTaskQueue = new ArrayBlockingQueue<>(1024 * 1024);
     private IVoucherOrderService proxy;
     
     /**
@@ -107,7 +107,7 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
     @Transactional
     public void createVoucherOrder(VoucherOrder voucherOrder) {
         //  一人只能抢购一张
-        Long userId = UserHolder.getUser().getId();
+        Long userId = voucherOrder.getUserId(); //子线程，不能通过ThreadLocal获取
         
         int count = Math.toIntExact(query().eq("voucher_id", voucherOrder.getVoucherId())
                                            .eq("user_id", userId)
@@ -121,8 +121,7 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         boolean success = seckillVoucherService.update().
                                                setSql("stock = stock - 1") // 扣减库存
                                                .eq("voucher_id", voucherOrder.getVoucherId()) // 优惠券id
-//                                               .eq("stock", voucher.getStock()) // 防止超卖
-                                               .gt("stock", 0) // 防止超卖
+                                               .gt("stock", 0)
                                                .update(); // 执行更新
         
         // 扣减失败

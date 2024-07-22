@@ -4,8 +4,8 @@
 --- DateTime: 2024/7/22 下午5:36
 ---
 
-local voucherId = argv[1]
-local userId = argv[2]
+local voucherId = ARGV[1]
+local userId = ARGV[2]
 local stockKey = 'seckill:stock:' .. voucherId
 local orderKey = 'seckill:order:' .. voucherId
 
